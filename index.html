@@ -166,7 +166,7 @@ h1{font-size:23px;font-weight:900;letter-spacing:-.01em;margin-bottom:6px;line-h
     </div>
     <div class="res-grid" id="resGrid"></div>
     <div class="res-note" id="resNote"></div>
-    <button class="btn gold" id="dlPng">🖼 이미지(PNG)로 저장</button>
+    <button class="btn gold" id="dlPng">📷 이미지 저장 (카메라롤/공유)</button>
     <button class="btn gold" id="dlPdf">📄 PDF로 저장</button>
     <button class="btn red" id="restart">새 측정 시작</button>
   </section>
@@ -186,7 +186,8 @@ h1{font-size:23px;font-weight:900;letter-spacing:-.01em;margin-bottom:6px;line-h
 const $ = id => document.getElementById(id);
 const V = $('hiddenVideo');
 
-const LM = { nose:0, sL:11, sR:12, hL:23, hR:24, kL:25, kR:26,
+const LM = { nose:0, eyeInL:1, eyeInR:4, mouthL:9, mouthR:10,
+  sL:11, sR:12, hL:23, hR:24, kL:25, kR:26,
   aL:27, aR:28, heelL:29, heelR:30, toeL:31, toeR:32 };
 const POINT_KEYS = ['nose','sL','sR','hL','hR','kL','kR','aL','aR','toeL','toeR'];
 const POINT_LABEL = {nose:'코',sL:'어깨L',sR:'어깨R',hL:'골반L',hR:'골반R',kL:'무릎L',kR:'무릎R',
@@ -407,13 +408,23 @@ function renderChips(){
 }
 
 /* 선택 프레임에서 MediaPipe로 몸 포인트 자동 감지 */
+let faceLm=null;   // 미간·입 등 얼굴 세로선용 (편집 안 함, 자동만)
 async function detectBodyOnFrame(){
   return new Promise(resolve=>{
     pose.onResults(res=>{
-      bodyPts={};
+      bodyPts={}; faceLm=null;
       if(res.poseLandmarks){
         POINT_KEYS.forEach(k=>{ const p=res.poseLandmarks[LM[k]];
           if(p) bodyPts[k]={nx:p.x, ny:p.y, moved:false}; });
+        // 얼굴 세로선 구성점 (미간=양눈안쪽중점, 입=입좌우중점)
+        const L=res.poseLandmarks;
+        const g=i=>L[i]&&L[i].visibility>0.2?{x:L[i].x,y:L[i].y}:null;
+        const eyeL=g(LM.eyeInL), eyeR=g(LM.eyeInR), mL=g(LM.mouthL), mR=g(LM.mouthR), nz=g(LM.nose);
+        faceLm={
+          brow: (eyeL&&eyeR)?{x:(eyeL.x+eyeR.x)/2,y:(eyeL.y+eyeR.y)/2}:null,  // 미간
+          nose: nz,
+          mouth: (mL&&mR)?{x:(mL.x+mR.x)/2,y:(mL.y+mR.y)/2}:null,             // 입 중앙
+        };
       }
       resolve();
     });
@@ -539,17 +550,21 @@ function renderResult(m){
   seg('kL','aL','rgba(255,255,255,.4)',LW*0.5);seg('kR','aR','rgba(255,255,255,.4)',LW*0.5);
   seg('aL','toeL','rgba(255,255,255,.4)',LW*0.5);seg('aR','toeR','rgba(255,255,255,.4)',LW*0.5);
 
-  // 몸 세로 중심선 (코 → 어깨중점 → 골반중점 → 무릎중점 → 발목중점 → 발가락중점)
+  // 몸 세로 중심축 (정수리→미간→코→입→어깨→골반→무릎→발목→발가락)
   const nose=bp('nose'), sL=bp('sL'),sR=bp('sR'),hL=bp('hL'),hR=bp('hR');
   const kL=bp('kL'),kR=bp('kR'),aL=bp('aL'),aR=bp('aR'),tL=bp('toeL'),tR=bp('toeR');
   const mid=(A,B)=>A&&B?{x:(A.x+B.x)/2,y:(A.y+B.y)/2}:null;
-  const chain=[ nose, mid(sL,sR), mid(hL,hR), mid(kL,kR), mid(aL,aR), mid(tL,tR) ].filter(Boolean);
+  // 얼굴 점 (정규화 → 픽셀)
+  const fp=o=>o?{x:o.x*W,y:o.y*H}:null;
+  let crown=null, brow=fp(faceLm&&faceLm.brow), mouth=fp(faceLm&&faceLm.mouth);
+  // 정수리 추정: 미간에서 코 반대방향으로 연장
+  if(brow&&nose){ crown={x:brow.x+(brow.x-nose.x)*1.2, y:brow.y+(brow.y-nose.y)*1.2}; }
+  const chain=[ crown, brow, nose, mouth, mid(sL,sR), mid(hL,hR), mid(kL,kR), mid(aL,aR), mid(tL,tR) ].filter(Boolean);
   if(chain.length>=2){
     cx3.setLineDash([14,9]);cx3.strokeStyle='#22C55E';cx3.lineWidth=LW*0.7;
     cx3.beginPath();
     chain.forEach((p,i)=> i===0?cx3.moveTo(p.x,p.y):cx3.lineTo(p.x,p.y));
     cx3.stroke();cx3.setLineDash([]);
-    // 중심축 각 마디에 작은 마커
     chain.forEach(p=>{ cx3.beginPath();cx3.arc(p.x,p.y,Math.max(S/140,4),0,7);
       cx3.fillStyle='#22C55E';cx3.fill(); });
   }
@@ -607,11 +622,21 @@ function fileBase(){
   const date=$('measureDate').value||new Date().toISOString().slice(0,10);
   return `AXIS_자세분석_${name}_${date}`;
 }
-$('dlPng').onclick=()=>{
-  const a=document.createElement('a');
-  a.download=fileBase()+'.png';
-  a.href=$('cv3').toDataURL('image/png');
-  a.click();
+$('dlPng').onclick=async ()=>{
+  const cv3=$('cv3');
+  // iOS: 공유 시트로 → "이미지 저장" 하면 카메라롤에 들어감
+  cv3.toBlob(async (blob)=>{
+    if(!blob){ alert('이미지 생성 실패'); return; }
+    const file=new File([blob], fileBase()+'.png', {type:'image/png'});
+    if(navigator.canShare && navigator.canShare({files:[file]})){
+      try{ await navigator.share({files:[file], title:'AXIS 자세분석'});
+        return; }catch(e){ /* 취소 시 아래 다운로드로 */ }
+    }
+    // 폴백: 일반 다운로드
+    const a=document.createElement('a');
+    a.download=fileBase()+'.png'; a.href=URL.createObjectURL(blob); a.click();
+    setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+  }, 'image/png');
 };
 $('dlPdf').onclick=()=>{
   try{
