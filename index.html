@@ -99,7 +99,7 @@ h1{font-size:23px;font-weight:900;letter-spacing:-.01em;margin-bottom:6px;line-h
 <body>
 
 <div id="hdr">
-  <div id="brand">HELLO BODY <span>AXIS</span><small>자세분석 · 누워서 (탑뷰) · <b style="color:#F59E0B;">v9 포스터</b></small></div>
+  <div id="brand">HELLO BODY <span>AXIS</span><small>자세분석 · 누워서 (탑뷰) · <b style="color:#F59E0B;">v10 통합</b></small></div>
   <div id="stepInd">1 / 4</div>
 </div>
 
@@ -182,8 +182,9 @@ h1{font-size:23px;font-weight:900;letter-spacing:-.01em;margin-bottom:6px;line-h
     <div style="font-size:12px;color:var(--gold);text-align:center;margin-bottom:14px;">▲ 몬드리안 포스터 (공유용)</div>
     <div class="res-grid" id="resGrid"></div>
     <div class="res-note" id="resNote"></div>
-    <button class="btn gold" id="dlPng">📷 이미지 저장 (카메라롤/공유)</button>
-    <button class="btn gold" id="dlPdf">📄 PDF로 저장</button>
+    <button class="btn gold" id="dlPng">📷 통합 결과지 저장 (사진+포스터+데이터)</button>
+    <button class="btn" id="dlPoster">✨ 몬드리안 포스터만 저장 (인스타용)</button>
+    <button class="btn" id="dlPdf">📄 PDF로 저장</button>
     <button class="btn red" id="restart">새 측정 시작</button>
   </section>
 </div>
@@ -463,6 +464,7 @@ $('backTo2').onclick = ()=>go(2);
 /* ── STEP 4: 분석 & 결과 ── */
 $('runAnalyze').onclick = ()=>{
   const metrics=computeMetrics();
+  window.__lastMetrics=metrics;
   renderResult(metrics);
   renderDiagram(metrics);
   renderMondrian(metrics);
@@ -864,6 +866,75 @@ function fileBase(){
   const date=$('measureDate').value||new Date().toISOString().slice(0,10);
   return `AXIS_자세분석_${name}_${date}`;
 }
+/* ── 통합 결과지: 사진 + 몬드리안 + 도형을 한 장으로 ── */
+function buildCombined(){
+  const c3=$('cv3'), c5=$('cv5');
+  const OW=1000;                              // 통합 이미지 기준 폭
+  const headH=76, dataH=250, footH=48;
+  const h3=c3.height*(OW/c3.width);           // 스냅샷 높이
+  const h5=c5.height*(OW/c5.width);           // 몬드리안 높이
+  const totalH = headH + h3 + h5 + dataH + footH;
+  const cv=document.createElement('canvas');
+  cv.width=OW; cv.height=Math.round(totalH);
+  const x=cv.getContext('2d');
+  x.fillStyle='#EFE9DA'; x.fillRect(0,0,OW,totalH);   // 크림 배경 (브랜드)
+
+  const name=($('memberName').value||'').trim();
+  const center=($('centerName').value||'').trim();
+  const move=($('moveName').value||'').trim();
+  const date=$('measureDate').value||new Date().toISOString().slice(0,10);
+
+  // ── 헤더 ──
+  x.fillStyle='#17150F'; x.textAlign='left'; x.textBaseline='middle';
+  x.font='900 34px "Noto Sans KR",sans-serif';
+  x.fillText('AXIS', 34, headH/2);
+  x.fillStyle='#A8382B'; x.font='700 15px "Space Grotesk",sans-serif';
+  x.fillText('POSTURE ALIGNMENT', 140, headH/2-11);
+  x.fillStyle='#8C6F35'; x.font='500 14px "Noto Sans KR",sans-serif';
+  x.fillText(center||'HELLO BODY', 140, headH/2+11);
+
+  // ── 1단: 스냅샷 (사진+점) ──
+  let y=headH;
+  x.drawImage(c3, 0, y, OW, h3); y+=h3;
+
+  // ── 2단: 몬드리안 ──
+  x.drawImage(c5, 0, y, OW, h5); y+=h5;
+
+  // ── 3단: 데이터 ──
+  const m=window.__lastMetrics||{};
+  const dy=y;
+  x.fillStyle='#17150F'; x.fillRect(0,dy,OW,dataH);   // 데이터는 잉크 배경
+  x.fillStyle='#F59E0B'; x.textAlign='left'; x.textBaseline='top';
+  x.font='800 18px "Noto Sans KR",sans-serif';
+  x.fillText('측정 지표 (각도)', 34, dy+22);
+  x.fillStyle='#EFE9DA'; x.textAlign='right'; x.font='600 15px "Noto Sans KR",sans-serif';
+  x.fillText(`${name||'회원'}${move?'  ·  '+move:''}`, OW-34, dy+24);
+
+  const rows=[];
+  const add=(l,v,thr)=>{ if(v==null)return; rows.push({l,v:`${v>0?'+':''}${v.toFixed(1)}°`,bad:Math.abs(v)>thr}); };
+  add('몸통 중심축',m.centerTilt,3); add('상체 세로',m.upperTilt,3); add('하지 세로',m.legTilt,3);
+  add('어깨',m.shoulderTilt,2); add('골반',m.pelvisTilt,2); add('무릎',m.kneeTilt,2);
+  add('발목',m.ankleTilt,2); add('발',m.toeTilt,2);
+  // 4열 그리드
+  const cols=4, cw=(OW-68)/cols, rh=68;
+  x.textBaseline='alphabetic';
+  rows.forEach((r,i)=>{
+    const col=i%cols, row=Math.floor(i/cols);
+    const cx=34+cw*col, cy=dy+70+row*rh;
+    x.textAlign='left'; x.fillStyle='#9a9284'; x.font='500 13px "Noto Sans KR",sans-serif';
+    x.fillText(r.l, cx, cy);
+    x.fillStyle=r.bad?'#FF6B6B':'#22C55E'; x.font='900 28px "Noto Sans KR",sans-serif';
+    x.fillText(r.v, cx, cy+30);
+  });
+
+  // ── 푸터 ──
+  x.fillStyle='#EFE9DA'; x.fillRect(0, dy+dataH, OW, footH);
+  x.fillStyle='#8C6F35'; x.textAlign='center'; x.textBaseline='middle';
+  x.font='400 13px "Space Grotesk",sans-serif';
+  x.fillText(`MEASURED ${date}  ·  원근보정 적용 · 변화 추이 확인용  ·  @hellobody.axis`, OW/2, dy+dataH+footH/2);
+  return cv;
+}
+
 async function shareCanvas(canvas, suffix){
   return new Promise(res=>{
     canvas.toBlob(async (blob)=>{
@@ -880,22 +951,21 @@ async function shareCanvas(canvas, suffix){
   });
 }
 $('dlPng').onclick=async ()=>{
-  await shareCanvas($('cv5'),'_포스터');     // 몬드리안 (공유용, 먼저)
-  await shareCanvas($('cv3'),'_사진');       // 사진+측정
-  await shareCanvas($('cv4'),'_도형');       // 도형 정렬도
+  const combined=buildCombined();            // 한 장에 다 담긴 통합 결과지
+  await shareCanvas(combined,'_결과지');
+};
+$('dlPoster').onclick=async ()=>{
+  await shareCanvas($('cv5'),'_포스터');     // 몬드리안만 (인스타용)
 };
 $('dlPdf').onclick=()=>{
   try{
     const { jsPDF }=window.jspdf;
-    const c3=$('cv3'), c4=$('cv4'), c5=$('cv5');
-    const pdf=new jsPDF({orientation: c5.width>c5.height?'l':'p', unit:'pt', format:[c5.width,c5.height]});
-    pdf.addImage(c5.toDataURL('image/jpeg',0.92),'JPEG',0,0,c5.width,c5.height);  // 1p 포스터
-    pdf.addPage([c3.width,c3.height], c3.width>c3.height?'l':'p');
-    pdf.addImage(c3.toDataURL('image/jpeg',0.92),'JPEG',0,0,c3.width,c3.height);  // 2p 사진
-    pdf.addPage([c4.width,c4.height], c4.width>c4.height?'l':'p');
-    pdf.addImage(c4.toDataURL('image/jpeg',0.92),'JPEG',0,0,c4.width,c4.height);  // 3p 도형
+    const cv=buildCombined();
+    const w=cv.width, h=cv.height;
+    const pdf=new jsPDF({orientation:'p', unit:'pt', format:[w,h]});
+    pdf.addImage(cv.toDataURL('image/jpeg',0.92),'JPEG',0,0,w,h);
     pdf.save(fileBase()+'.pdf');
-  }catch(e){ alert('PDF 저장 실패 — PNG로 저장해 주세요.'); }
+  }catch(e){ alert('PDF 저장 실패 — 이미지로 저장해 주세요.'); }
 };
 
 $('restart').onclick = ()=>{ corners=[]; bodyPts={}; frameImg=null; $('file').value=''; go(1); };
