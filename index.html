@@ -129,7 +129,7 @@ h1{font-size:23px;font-weight:900;letter-spacing:-.01em;margin-bottom:6px;line-h
   <section class="screen" id="s2">
     <div class="eyebrow">STEP 2 · 프레임 선택</div>
     <h1>분석할 순간을 고르세요</h1>
-    <div id="cwrap"><canvas id="cv"></canvas></div>
+    <div id="cwrap" style="position:relative;width:100%;max-height:58vh;background:#000;border-radius:14px;overflow:hidden;border:1px solid var(--border);margin-bottom:14px;display:flex;justify-content:center;"><canvas id="cv" style="display:block;max-width:100%;max-height:58vh;width:auto;height:auto;"></canvas></div>
     <div class="ptxt" id="frameTime">0.0초</div>
     <input type="range" id="scrub" min="0" max="100" value="50" style="width:100%;margin-bottom:16px;">
     <button class="btn red" id="toCalib">이 프레임으로 보정 →</button>
@@ -141,8 +141,8 @@ h1{font-size:23px;font-weight:900;letter-spacing:-.01em;margin-bottom:6px;line-h
     <div class="eyebrow">STEP 3 · 보정 (애플펜슬)</div>
     <h1 id="calibTitle">매트 네 모서리를 찍으세요</h1>
     <div class="hint gold" id="calibHint"><span class="n" id="calibN">1</span><span id="calibMsg">매트 좌상 모서리를 탭하세요</span></div>
-    <div id="cwrap2" style="position:relative;width:100%;background:#000;border-radius:14px;overflow:hidden;border:1px solid var(--border);margin-bottom:14px;touch-action:none;">
-      <canvas id="cv2" style="display:block;width:100%;height:auto;touch-action:none;cursor:crosshair;"></canvas>
+    <div id="cwrap2" style="position:relative;width:100%;max-height:62vh;background:#000;border-radius:14px;overflow:hidden;border:1px solid var(--border);margin-bottom:14px;touch-action:none;display:flex;justify-content:center;">
+      <canvas id="cv2" style="display:block;max-width:100%;max-height:62vh;width:auto;height:auto;touch-action:none;cursor:crosshair;"></canvas>
     </div>
     <div id="chips" style="display:none;"></div>
     <button class="btn gold" id="calibNext" disabled>매트 완료 — 몸 포인트 확인 →</button>
@@ -155,11 +155,19 @@ h1{font-size:23px;font-weight:900;letter-spacing:-.01em;margin-bottom:6px;line-h
   <section class="screen" id="s4">
     <div class="eyebrow">STEP 4 · RESULT</div>
     <h1>측정 결과</h1>
+    <div style="display:flex;gap:8px;margin-bottom:12px;">
+      <input id="memberName" placeholder="회원명" style="flex:1;padding:11px;border-radius:10px;
+        background:var(--card);border:1px solid var(--border);color:#fff;font-size:14px;outline:none;">
+      <input id="measureDate" type="date" style="flex:1;padding:11px;border-radius:10px;
+        background:var(--card);border:1px solid var(--border);color:#fff;font-size:14px;outline:none;">
+    </div>
     <div id="cwrap3" style="width:100%;background:#000;border-radius:14px;overflow:hidden;border:1px solid var(--border);margin-bottom:14px;">
       <canvas id="cv3" style="display:block;width:100%;height:auto;"></canvas>
     </div>
     <div class="res-grid" id="resGrid"></div>
     <div class="res-note" id="resNote"></div>
+    <button class="btn gold" id="dlPng">🖼 이미지(PNG)로 저장</button>
+    <button class="btn gold" id="dlPdf">📄 PDF로 저장</button>
     <button class="btn red" id="restart">새 측정 시작</button>
   </section>
 </div>
@@ -168,6 +176,7 @@ h1{font-size:23px;font-weight:900;letter-spacing:-.01em;margin-bottom:6px;line-h
 <video id="hiddenVideo" playsinline muted style="display:none;"></video>
 
 <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose@0.5.1675469404/pose.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js"></script>
 <script>
 /* ══════════════════════════════════════════════
    AXIS 영상 자세분석 · 누워서 (탑뷰)
@@ -179,8 +188,8 @@ const V = $('hiddenVideo');
 
 const LM = { nose:0, sL:11, sR:12, hL:23, hR:24, kL:25, kR:26,
   aL:27, aR:28, heelL:29, heelR:30, toeL:31, toeR:32 };
-const POINT_KEYS = ['sL','sR','hL','hR','kL','kR','aL','aR','toeL','toeR'];
-const POINT_LABEL = {sL:'어깨L',sR:'어깨R',hL:'골반L',hR:'골반R',kL:'무릎L',kR:'무릎R',
+const POINT_KEYS = ['nose','sL','sR','hL','hR','kL','kR','aL','aR','toeL','toeR'];
+const POINT_LABEL = {nose:'코',sL:'어깨L',sR:'어깨R',hL:'골반L',hR:'골반R',kL:'무릎L',kR:'무릎R',
   aL:'발목L',aR:'발목R',toeL:'발가락L',toeR:'발가락R'};
 
 let pose=null, frameImg=null;      // 선택된 프레임 이미지 (ImageBitmap/canvas)
@@ -210,9 +219,12 @@ $('file').addEventListener('change', async e=>{
   const f=e.target.files[0]; if(!f) return;
   load(true,'영상 불러오는 중…');
   V.src=URL.createObjectURL(f);
+  V.muted=true; V.playsInline=true;
   try{
     await new Promise((res,rej)=>{ V.onloadedmetadata=res; V.onerror=()=>rej(new Error('영상 로드 실패'));
       setTimeout(()=>rej(new Error('시간 초과')),15000); });
+    // iOS: 프레임 디코딩을 깨우기 위해 잠깐 재생 후 정지
+    try{ await V.play(); await new Promise(r=>setTimeout(r,150)); V.pause(); }catch{}
     load(false);
     setupScrub();
     go(2);
@@ -223,22 +235,35 @@ $('file').addEventListener('change', async e=>{
 const cv=$('cv'), cx=cv.getContext('2d');
 function setupScrub(){
   $('scrub').value=50;
-  seekTo(V.duration*0.5);
+  // 첫 프레임은 약간 뒤로 (0초는 검은 프레임일 수 있음)
+  seekTo(Math.min(V.duration*0.5, V.duration-0.1));
 }
 $('scrub').addEventListener('input', ()=>{ seekTo(V.duration*$('scrub').value/100); });
+let _seekPending=false;
 function seekTo(t){
-  V.currentTime=Math.min(Math.max(t,0),V.duration||0);
-  V.onseeked=()=>{ drawFrameToCanvas(cv,cx); $('frameTime').textContent=V.currentTime.toFixed(1)+'초'; };
+  _seekPending=true;
+  V.currentTime=Math.min(Math.max(t,0.05),V.duration||0);
 }
+// seeked 이벤트를 한 곳에서 처리 (iOS Safari 안정성)
+V.addEventListener('seeked', ()=>{
+  if(!_seekPending) return;
+  _seekPending=false;
+  // 디코딩 완료를 위해 다음 프레임에 그림
+  requestAnimationFrame(()=>{
+    drawFrameToCanvas(cv,cx);
+    $('frameTime').textContent=V.currentTime.toFixed(1)+'초';
+  });
+});
 function drawFrameToCanvas(canvas,ctx){
   canvas.width=V.videoWidth; canvas.height=V.videoHeight;
   ctx.drawImage(V,0,0,canvas.width,canvas.height);
 }
 $('toCalib').onclick = ()=>{
-  // 현재 프레임을 이미지로 고정
+  // STEP2에서 이미 화면에 그려진 cv(프레임)를 그대로 복사 → 검은 화면 방지
+  if(!cv.width || !cv.height){ alert('프레임을 먼저 선택하세요.'); return; }
   frameImg=document.createElement('canvas');
-  frameImg.width=V.videoWidth; frameImg.height=V.videoHeight;
-  frameImg.getContext('2d').drawImage(V,0,0);
+  frameImg.width=cv.width; frameImg.height=cv.height;
+  frameImg.getContext('2d').drawImage(cv,0,0);
   corners=[]; bodyPts={}; selChip=null;
   enterCalib();
   go(3);
@@ -442,64 +467,163 @@ function computeMetrics(){
     const bodyCx=(c.sL.x+c.sR.x+c.hL.x+c.hR.x)/4;
     m.centerDeviation=(bodyCx-0.5)*100;    // 정사각 중앙(0.5) 대비 %
   }
-  if(c.sL&&c.sR) m.shoulderTilt=Math.atan2(c.sR.y-c.sL.y,c.sR.x-c.sL.x)*180/Math.PI;
-  if(c.hL&&c.hR) m.pelvisTilt=Math.atan2(c.hR.y-c.hL.y,c.hR.x-c.hL.x)*180/Math.PI;
+  // 수평선 기준 기울기 (-90~+90°). L/R 순서·미러와 무관하게 "수평에서 벗어난 각도"
+  const tilt=(A,B)=>{
+    let deg=Math.atan2(B.y-A.y, B.x-A.x)*180/Math.PI;  // -180~180
+    // 수평(0/180)을 기준으로 접어서 -90~90로
+    if(deg>90) deg-=180; else if(deg<-90) deg+=180;
+    return deg;   // +면 오른쪽이 낮음, -면 왼쪽이 낮음
+  };
+  if(c.sL&&c.sR) m.shoulderTilt=tilt(c.sL,c.sR);
+  if(c.hL&&c.hR) m.pelvisTilt=tilt(c.hL,c.hR);
   if(c.kL&&c.kR) m.kneeAsym=Math.abs(c.kL.y-c.kR.y)*100;
   if(c.aL&&c.aR) m.ankleAsym=Math.abs(c.aL.y-c.aR.y)*100;
   if(c.toeL&&c.toeR) m.toeAsym=Math.abs(c.toeL.y-c.toeR.y)*100;
+
+  // 세로선 정렬 (측만): 코 → 어깨중점 → 골반중점이 일직선인가
+  // 각 지점의 x가 얼마나 좌우로 흔들리는지 (수직축 대비 편차)
+  if(c.nose && c.sL&&c.sR && c.hL&&c.hR){
+    const noseX=c.nose.x;
+    const shX=(c.sL.x+c.sR.x)/2;
+    const hipX=(c.hL.x+c.hR.x)/2;
+    // 골반중점을 기준으로 코·어깨가 좌우로 벗어난 정도 (정사각폭 대비 %)
+    m.verticalDeviation = Math.max(Math.abs(noseX-hipX), Math.abs(shX-hipX))*100;
+    m.verticalDir = (noseX>hipX?'머리가 오른쪽':'머리가 왼쪽');
+  }
+  // 하지 정렬: 골반→무릎→발목→발가락이 세로로 일직선인가
+  if(c.hL&&c.hR && c.kL&&c.kR && c.aL&&c.aR){
+    const hipX=(c.hL.x+c.hR.x)/2, kneeX=(c.kL.x+c.kR.x)/2, ankX=(c.aL.x+c.aR.x)/2;
+    let toeX=ankX; if(c.toeL&&c.toeR) toeX=(c.toeL.x+c.toeR.x)/2;
+    m.legAlign = Math.max(Math.abs(kneeX-hipX),Math.abs(ankX-hipX),Math.abs(toeX-hipX))*100;
+    m.legDir = (ankX>hipX?'발이 오른쪽':'발이 왼쪽');
+  }
   m._corrected=c;
   return m;
 }
 
 function renderResult(m){
-  // 결과 도식: 보정된 정사각형 안에 선으로 그림 (사람 이미지 없이)
   const cv3=$('cv3'), cx3=cv3.getContext('2d');
-  const S=600; cv3.width=S; cv3.height=S;
-  cx3.fillStyle='#0A0A0A'; cx3.fillRect(0,0,S,S);
-  // 기구 프레임 (정사각형)
-  cx3.strokeStyle='rgba(245,158,11,.7)'; cx3.lineWidth=2; cx3.setLineDash([10,6]);
-  cx3.strokeRect(S*0.1,S*0.05,S*0.8,S*0.9); cx3.setLineDash([]);
-  // 기구 중심선
-  cx3.strokeStyle='rgba(34,197,94,.5)'; cx3.lineWidth=2;
-  cx3.beginPath(); cx3.moveTo(S*0.5,S*0.05); cx3.lineTo(S*0.5,S*0.95); cx3.stroke();
+  // 스냅샷 원본 위에 그린다 (실제 위치 = 사진과 일치)
+  const W=frameImg.width, H=frameImg.height;
+  cv3.width=W; cv3.height=H;
+  cx3.drawImage(frameImg,0,0);
+  // 반투명 어둡게 (선이 잘 보이게)
+  cx3.fillStyle='rgba(0,0,0,.45)'; cx3.fillRect(0,0,W,H);
 
-  const c=m._corrected;
-  const P=k=>c[k]?{x:S*0.1+c[k].x*S*0.8, y:S*0.05+c[k].y*S*0.9}:null;
-  const seg=(a,b,col,w)=>{const A=P(a),B=P(b);if(!A||!B)return;
+  const S=Math.min(W,H);
+  const bp=k=>bodyPts[k]?{x:bodyPts[k].nx*W, y:bodyPts[k].ny*H}:null;  // 원본 위치
+  const seg=(a,b,col,w)=>{const A=bp(a),B=bp(b);if(!A||!B)return;
     cx3.strokeStyle=col;cx3.lineWidth=w;cx3.lineCap='round';
     cx3.beginPath();cx3.moveTo(A.x,A.y);cx3.lineTo(B.x,B.y);cx3.stroke();};
-  seg('sL','sR','#E8291C',5); seg('hL','hR','#E8291C',5);
-  seg('kL','kR','#FF9500',4); seg('aL','aR','#00CED1',4); seg('toeL','toeR','#20B2AA',4);
-  seg('sL','hL','rgba(255,255,255,.4)',3);seg('sR','hR','rgba(255,255,255,.4)',3);
-  seg('hL','kL','rgba(255,255,255,.4)',3);seg('hR','kR','rgba(255,255,255,.4)',3);
-  seg('kL','aL','rgba(255,255,255,.4)',3);seg('kR','aR','rgba(255,255,255,.4)',3);
-  seg('aL','toeL','rgba(255,255,255,.4)',3);seg('aR','toeR','rgba(255,255,255,.4)',3);
-  // 몸 중심선
-  if(c.sL&&c.sR&&c.hL&&c.hR){
-    const sm={x:(P('sL').x+P('sR').x)/2,y:(P('sL').y+P('sR').y)/2};
-    const hm={x:(P('hL').x+P('hR').x)/2,y:(P('hL').y+P('hR').y)/2};
-    cx3.setLineDash([12,8]); cx3.strokeStyle='#22C55E'; cx3.lineWidth=3;
-    cx3.beginPath();cx3.moveTo(sm.x,sm.y);cx3.lineTo(hm.x,hm.y);cx3.stroke();cx3.setLineDash([]);
-  }
-  POINT_KEYS.forEach(k=>{const p=P(k);if(!p)return;
-    cx3.beginPath();cx3.arc(p.x,p.y,5,0,7);cx3.fillStyle='#fff';cx3.fill();});
+  const LW=Math.max(S/180,4);
 
-  // 지표 카드
-  const T={center:5,shoulder:3,pelvis:3,knee:4,ankle:4,toe:4};
+  // 리포머 프레임 (찍은 4점 그대로 = 실제 비율)
+  if(corners.length===4){
+    cx3.strokeStyle='rgba(245,158,11,.85)';cx3.lineWidth=LW*0.7;cx3.setLineDash([12,7]);
+    cx3.beginPath();
+    corners.forEach((c,i)=>{const x=c.nx*W,y=c.ny*H;i===0?cx3.moveTo(x,y):cx3.lineTo(x,y);});
+    cx3.closePath();cx3.stroke();cx3.setLineDash([]);
+    // 기구 중심선 (상변 중점 → 하변 중점)
+    const topM={x:(corners[0].nx+corners[1].nx)/2*W, y:(corners[0].ny+corners[1].ny)/2*H};
+    const botM={x:(corners[2].nx+corners[3].nx)/2*W, y:(corners[2].ny+corners[3].ny)/2*H};
+    cx3.strokeStyle='rgba(34,197,94,.55)';cx3.lineWidth=LW*0.6;
+    cx3.beginPath();cx3.moveTo(topM.x,topM.y);cx3.lineTo(botM.x,botM.y);cx3.stroke();
+  }
+
+  // 가로선
+  seg('sL','sR','#E8291C',LW); seg('hL','hR','#E8291C',LW);
+  seg('kL','kR','#FF9500',LW*0.85); seg('aL','aR','#00CED1',LW*0.85); seg('toeL','toeR','#20B2AA',LW*0.85);
+  // 세로 연결
+  seg('sL','hL','rgba(255,255,255,.4)',LW*0.5);seg('sR','hR','rgba(255,255,255,.4)',LW*0.5);
+  seg('hL','kL','rgba(255,255,255,.4)',LW*0.5);seg('hR','kR','rgba(255,255,255,.4)',LW*0.5);
+  seg('kL','aL','rgba(255,255,255,.4)',LW*0.5);seg('kR','aR','rgba(255,255,255,.4)',LW*0.5);
+  seg('aL','toeL','rgba(255,255,255,.4)',LW*0.5);seg('aR','toeR','rgba(255,255,255,.4)',LW*0.5);
+
+  // 몸 세로 중심선 (코 → 어깨중점 → 골반중점 → 무릎중점 → 발목중점 → 발가락중점)
+  const nose=bp('nose'), sL=bp('sL'),sR=bp('sR'),hL=bp('hL'),hR=bp('hR');
+  const kL=bp('kL'),kR=bp('kR'),aL=bp('aL'),aR=bp('aR'),tL=bp('toeL'),tR=bp('toeR');
+  const mid=(A,B)=>A&&B?{x:(A.x+B.x)/2,y:(A.y+B.y)/2}:null;
+  const chain=[ nose, mid(sL,sR), mid(hL,hR), mid(kL,kR), mid(aL,aR), mid(tL,tR) ].filter(Boolean);
+  if(chain.length>=2){
+    cx3.setLineDash([14,9]);cx3.strokeStyle='#22C55E';cx3.lineWidth=LW*0.7;
+    cx3.beginPath();
+    chain.forEach((p,i)=> i===0?cx3.moveTo(p.x,p.y):cx3.lineTo(p.x,p.y));
+    cx3.stroke();cx3.setLineDash([]);
+    // 중심축 각 마디에 작은 마커
+    chain.forEach(p=>{ cx3.beginPath();cx3.arc(p.x,p.y,Math.max(S/140,4),0,7);
+      cx3.fillStyle='#22C55E';cx3.fill(); });
+  }
+
+  // 관절점 + 라벨
+  cx3.font=`700 ${Math.max(S/45,13)}px -apple-system`;
+  POINT_KEYS.forEach(k=>{const p=bp(k);if(!p)return;
+    cx3.beginPath();cx3.arc(p.x,p.y,Math.max(S/90,6),0,7);cx3.fillStyle='#fff';cx3.fill();
+    cx3.lineWidth=2;cx3.strokeStyle='rgba(0,0,0,.6)';cx3.stroke();
+    // 라벨 (점 옆)
+    const lbl=POINT_LABEL[k];
+    const off=k.endsWith('R')?12:-12;
+    cx3.textAlign=k.endsWith('R')?'left':'right'; cx3.textBaseline='middle';
+    cx3.fillStyle='rgba(0,0,0,.75)';
+    const tw=cx3.measureText(lbl).width;
+    const lx=p.x+(k.endsWith('R')?off:off-tw);
+    cx3.fillRect(lx-3, p.y-9, tw+6, 18);
+    cx3.fillStyle='#fff'; cx3.fillText(lbl, p.x+off, p.y);
+  });
+
+  // 상단 메타 (회원명·날짜)
+  const name=$('memberName').value||'';
+  const date=$('measureDate').value||new Date().toISOString().slice(0,10);
+  cx3.textAlign='left';cx3.textBaseline='top';
+  cx3.font=`800 ${Math.max(S/38,15)}px -apple-system`;
+  cx3.fillStyle='#E8291C'; cx3.fillText('AXIS 자세분석 · 누워서', 16, 14);
+  cx3.font=`600 ${Math.max(S/50,12)}px -apple-system`;
+  cx3.fillStyle='#fff';
+  cx3.fillText(`${name?name+' · ':''}${date}`, 16, 14+Math.max(S/32,18));
+
+  // ── 지표 카드 (임계값: 어깨·골반 2°, 비대칭 3%, 중심선 3%) ──
+  const T={center:3, vertical:3, shoulder:2, pelvis:2, knee:3, ankle:3, toe:3};
   const card=(l,v,unit,thr,sub)=>{const bad=Math.abs(v)>thr;
     return `<div class="res ${bad?'warn':'ok'}"><div class="l">${l}</div>
-      <div class="v">${v>=0?'':''}${v.toFixed(1)}${unit}</div><div class="sub">${sub}</div></div>`;};
+      <div class="v">${v.toFixed(1)}${unit}</div><div class="sub">${sub}</div></div>`;};
   let html='';
   if(m.centerDeviation!=null) html+=card('중심선 편차',m.centerDeviation,'%',T.center,
     m.centerDeviation>0?'오른쪽으로 치우침':'왼쪽으로 치우침');
-  if(m.shoulderTilt!=null) html+=card('어깨 기울기',m.shoulderTilt,'°',T.shoulder,'좌우 높이 차');
-  if(m.pelvisTilt!=null) html+=card('골반 기울기',m.pelvisTilt,'°',T.pelvis,'좌우 높이 차');
+  if(m.verticalDeviation!=null) html+=card('상체 세로정렬',m.verticalDeviation,'%',T.vertical, m.verticalDir||'세로축 편차');
+  if(m.legAlign!=null) html+=card('하지 세로정렬',m.legAlign,'%',T.vertical, m.legDir||'골반-발 정렬');
+  if(m.shoulderTilt!=null) html+=card('어깨 기울기',m.shoulderTilt,'°',T.shoulder,
+    m.shoulderTilt>0?'오른쪽이 낮음':'왼쪽이 낮음');
+  if(m.pelvisTilt!=null) html+=card('골반 기울기',m.pelvisTilt,'°',T.pelvis,
+    m.pelvisTilt>0?'오른쪽이 낮음':'왼쪽이 낮음');
   if(m.kneeAsym!=null) html+=card('무릎 비대칭',m.kneeAsym,'%',T.knee,'좌우 높이 차');
   if(m.ankleAsym!=null) html+=card('발목 비대칭',m.ankleAsym,'%',T.ankle,'좌우 높이 차');
   if(m.toeAsym!=null) html+=card('발 비대칭',m.toeAsym,'%',T.toe,'좌우 높이 차');
   $('resGrid').innerHTML=html;
-  $('resNote').innerHTML='<b>원근 보정 적용됨</b> — 매트를 반듯한 정사각형으로 펴서 카메라 기울기를 제거한 값입니다. 수치는 상대값으로, 세션 간 <b>변화 추이</b> 확인용입니다.';
+  $('resNote').innerHTML='<b>원근 보정 적용</b> — 리포머 4점을 반듯하게 펴서 카메라 기울기를 제거한 값입니다. 임계값: 어깨·골반 2°, 비대칭 3% 초과 시 경고(빨강). 세션 간 <b>변화 추이</b> 확인용입니다.';
 }
+
+/* ── 다운로드 ── */
+function fileBase(){
+  const name=($('memberName').value||'회원').replace(/\s/g,'');
+  const date=$('measureDate').value||new Date().toISOString().slice(0,10);
+  return `AXIS_자세분석_${name}_${date}`;
+}
+$('dlPng').onclick=()=>{
+  const a=document.createElement('a');
+  a.download=fileBase()+'.png';
+  a.href=$('cv3').toDataURL('image/png');
+  a.click();
+};
+$('dlPdf').onclick=()=>{
+  try{
+    const { jsPDF }=window.jspdf;
+    const cv3=$('cv3');
+    const img=cv3.toDataURL('image/jpeg',0.92);
+    const w=cv3.width, h=cv3.height;
+    const pdf=new jsPDF({orientation: w>h?'l':'p', unit:'pt', format:[w,h]});
+    pdf.addImage(img,'JPEG',0,0,w,h);
+    pdf.save(fileBase()+'.pdf');
+  }catch(e){ alert('PDF 저장 실패 — PNG로 저장해 주세요.'); }
+};
 
 $('restart').onclick = ()=>{ corners=[]; bodyPts={}; frameImg=null; $('file').value=''; go(1); };
 </script>
