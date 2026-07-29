@@ -484,39 +484,48 @@ function computeMetrics(){
   const c={};   // 보정된 몸 좌표 (정사각형 0~1)
   POINT_KEYS.forEach(k=>{ if(bodyPts[k]) c[k]=applyH(H,bodyPts[k].nx,bodyPts[k].ny); });
   const m={};
-  if(c.sL&&c.sR&&c.hL&&c.hR){
-    const bodyCx=(c.sL.x+c.sR.x+c.hL.x+c.hR.x)/4;
-    m.centerDeviation=(bodyCx-0.5)*100;    // 정사각 중앙(0.5) 대비 %
-  }
-  // 수평선 기준 기울기 (-90~+90°). L/R 순서·미러와 무관하게 "수평에서 벗어난 각도"
+  // ── 각도 계산 헬퍼 ──
+  // 좌우선의 수평 대비 기울기 (-90~90°). +면 오른쪽이 낮음
   const tilt=(A,B)=>{
-    let deg=Math.atan2(B.y-A.y, B.x-A.x)*180/Math.PI;  // -180~180
-    // 수평(0/180)을 기준으로 접어서 -90~90로
+    let deg=Math.atan2(B.y-A.y, B.x-A.x)*180/Math.PI;
     if(deg>90) deg-=180; else if(deg<-90) deg+=180;
-    return deg;   // +면 오른쪽이 낮음, -면 왼쪽이 낮음
+    return deg;
   };
+  // 세로축(위→아래 두 점)의 수직 대비 기울기 (-90~90°). +면 위쪽이 오른쪽으로
+  const vtilt=(top,bot)=>{
+    // 수직선(x=일정) 기준 벗어난 각도 = atan2(dx, dy)
+    let deg=Math.atan2(top.x-bot.x, bot.y-top.y)*180/Math.PI;
+    return deg;   // +면 위쪽 점이 오른쪽
+  };
+
+  // ── 좌우선 기울기 (수평 기준 각도) ──
   if(c.sL&&c.sR) m.shoulderTilt=tilt(c.sL,c.sR);
   if(c.hL&&c.hR) m.pelvisTilt=tilt(c.hL,c.hR);
-  if(c.kL&&c.kR) m.kneeAsym=Math.abs(c.kL.y-c.kR.y)*100;
-  if(c.aL&&c.aR) m.ankleAsym=Math.abs(c.aL.y-c.aR.y)*100;
-  if(c.toeL&&c.toeR) m.toeAsym=Math.abs(c.toeL.y-c.toeR.y)*100;
+  if(c.kL&&c.kR) m.kneeTilt=tilt(c.kL,c.kR);
+  if(c.aL&&c.aR) m.ankleTilt=tilt(c.aL,c.aR);
+  if(c.toeL&&c.toeR) m.toeTilt=tilt(c.toeL,c.toeR);
 
-  // 세로선 정렬 (측만): 코 → 어깨중점 → 골반중점이 일직선인가
-  // 각 지점의 x가 얼마나 좌우로 흔들리는지 (수직축 대비 편차)
-  if(c.nose && c.sL&&c.sR && c.hL&&c.hR){
-    const noseX=c.nose.x;
-    const shX=(c.sL.x+c.sR.x)/2;
-    const hipX=(c.hL.x+c.hR.x)/2;
-    // 골반중점을 기준으로 코·어깨가 좌우로 벗어난 정도 (정사각폭 대비 %)
-    m.verticalDeviation = Math.max(Math.abs(noseX-hipX), Math.abs(shX-hipX))*100;
-    m.verticalDir = (noseX>hipX?'머리가 오른쪽':'머리가 왼쪽');
+  // ── 세로 정렬 (수직 기준 각도) ──
+  // 몸 중심축이 기구 세로축(수직)에서 몇 도 기울었나
+  if(c.sL&&c.sR&&c.hL&&c.hR){
+    const sm={x:(c.sL.x+c.sR.x)/2, y:(c.sL.y+c.sR.y)/2};
+    const hm={x:(c.hL.x+c.hR.x)/2, y:(c.hL.y+c.hR.y)/2};
+    m.centerTilt=vtilt(sm,hm);   // 몸통 중심선의 수직 대비 각도
+    m.centerDir=(m.centerTilt>0?'상체가 오른쪽':'상체가 왼쪽');
   }
-  // 하지 정렬: 골반→무릎→발목→발가락이 세로로 일직선인가
-  if(c.hL&&c.hR && c.kL&&c.kR && c.aL&&c.aR){
-    const hipX=(c.hL.x+c.hR.x)/2, kneeX=(c.kL.x+c.kR.x)/2, ankX=(c.aL.x+c.aR.x)/2;
-    let toeX=ankX; if(c.toeL&&c.toeR) toeX=(c.toeL.x+c.toeR.x)/2;
-    m.legAlign = Math.max(Math.abs(kneeX-hipX),Math.abs(ankX-hipX),Math.abs(toeX-hipX))*100;
-    m.legDir = (ankX>hipX?'발이 오른쪽':'발이 왼쪽');
+  // 상체 세로: 코(또는 미간) → 골반중점
+  if((c.brow||c.nose) && c.hL&&c.hR){
+    const head=c.brow||c.nose;
+    const hm={x:(c.hL.x+c.hR.x)/2, y:(c.hL.y+c.hR.y)/2};
+    m.upperTilt=vtilt(head,hm);
+    m.upperDir=(m.upperTilt>0?'머리가 오른쪽':'머리가 왼쪽');
+  }
+  // 하지 세로: 골반중점 → 발목중점
+  if(c.hL&&c.hR && c.aL&&c.aR){
+    const hm={x:(c.hL.x+c.hR.x)/2, y:(c.hL.y+c.hR.y)/2};
+    const am={x:(c.aL.x+c.aR.x)/2, y:(c.aL.y+c.aR.y)/2};
+    m.legTilt=vtilt(hm,am);   // 주의: 위=골반, 아래=발목
+    m.legDir=(m.legTilt>0?'골반이 오른쪽':'골반이 왼쪽');
   }
   m._corrected=c;
   return m;
@@ -613,24 +622,52 @@ function renderResult(m){
   cx3.fillText(`${name?name+' · ':''}${date}`, 16, 14+Math.max(S/32,18));
 
   // ── 지표 카드 (임계값: 어깨·골반 2°, 비대칭 3%, 중심선 3%) ──
-  const T={center:3, vertical:3, shoulder:2, pelvis:2, knee:3, ankle:3, toe:3};
-  const card=(l,v,unit,thr,sub)=>{const bad=Math.abs(v)>thr;
+  // 임계값 (전부 각도). 좌우선: 2°, 세로선: 3°
+  const T={horiz:2, vert:3};
+  const card=(l,v,thr,sub)=>{const bad=Math.abs(v)>thr;
     return `<div class="res ${bad?'warn':'ok'}"><div class="l">${l}</div>
-      <div class="v">${v.toFixed(1)}${unit}</div><div class="sub">${sub}</div></div>`;};
+      <div class="v">${v>0?'+':''}${v.toFixed(1)}°</div><div class="sub">${sub}</div></div>`;};
   let html='';
-  if(m.centerDeviation!=null) html+=card('중심선 편차',m.centerDeviation,'%',T.center,
-    m.centerDeviation>0?'오른쪽으로 치우침':'왼쪽으로 치우침');
-  if(m.verticalDeviation!=null) html+=card('상체 세로정렬',m.verticalDeviation,'%',T.vertical, m.verticalDir||'세로축 편차');
-  if(m.legAlign!=null) html+=card('하지 세로정렬',m.legAlign,'%',T.vertical, m.legDir||'골반-발 정렬');
-  if(m.shoulderTilt!=null) html+=card('어깨 기울기',m.shoulderTilt,'°',T.shoulder,
-    m.shoulderTilt>0?'오른쪽이 낮음':'왼쪽이 낮음');
-  if(m.pelvisTilt!=null) html+=card('골반 기울기',m.pelvisTilt,'°',T.pelvis,
-    m.pelvisTilt>0?'오른쪽이 낮음':'왼쪽이 낮음');
-  if(m.kneeAsym!=null) html+=card('무릎 비대칭',m.kneeAsym,'%',T.knee,'좌우 높이 차');
-  if(m.ankleAsym!=null) html+=card('발목 비대칭',m.ankleAsym,'%',T.ankle,'좌우 높이 차');
-  if(m.toeAsym!=null) html+=card('발 비대칭',m.toeAsym,'%',T.toe,'좌우 높이 차');
+  // 세로 정렬 (수직 기준 각도)
+  if(m.centerTilt!=null) html+=card('몸통 중심축',m.centerTilt,T.vert, m.centerDir||'수직 대비');
+  if(m.upperTilt!=null) html+=card('상체 세로',m.upperTilt,T.vert, m.upperDir||'머리-골반 축');
+  if(m.legTilt!=null) html+=card('하지 세로',m.legTilt,T.vert, m.legDir||'골반-발목 축');
+  // 좌우선 기울기 (수평 기준 각도)
+  if(m.shoulderTilt!=null) html+=card('어깨 기울기',m.shoulderTilt,T.horiz, m.shoulderTilt>0?'오른쪽이 낮음':'왼쪽이 낮음');
+  if(m.pelvisTilt!=null) html+=card('골반 기울기',m.pelvisTilt,T.horiz, m.pelvisTilt>0?'오른쪽이 낮음':'왼쪽이 낮음');
+  if(m.kneeTilt!=null) html+=card('무릎 기울기',m.kneeTilt,T.horiz, m.kneeTilt>0?'오른쪽이 낮음':'왼쪽이 낮음');
+  if(m.ankleTilt!=null) html+=card('발목 기울기',m.ankleTilt,T.horiz, m.ankleTilt>0?'오른쪽이 낮음':'왼쪽이 낮음');
+  if(m.toeTilt!=null) html+=card('발 기울기',m.toeTilt,T.horiz, m.toeTilt>0?'오른쪽이 낮음':'왼쪽이 낮음');
   $('resGrid').innerHTML=html;
-  $('resNote').innerHTML='<b>원근 보정 적용</b> — 리포머 4점을 반듯하게 펴서 카메라 기울기를 제거한 값입니다. 임계값: 어깨·골반 2°, 비대칭 3% 초과 시 경고(빨강). 세션 간 <b>변화 추이</b> 확인용입니다.';
+  $('resNote').innerHTML='<b>원근 보정 적용</b> — 리포머 4점을 반듯하게 펴서 카메라 기울기를 제거했습니다. 모든 값은 <b>각도(°)</b>: 좌우선은 수평 기준, 세로선은 수직 기준 기울기입니다. 임계값 좌우 2°·세로 3° 초과 시 경고(빨강). 세션 간 <b>변화 추이</b> 확인용입니다.';
+
+  // ── 저장 이미지에 지표 데이터 새겨넣기 (사진+데이터 함께 저장) ──
+  const rows=[];
+  const push=(l,v,thr)=>{ if(v==null) return; const bad=Math.abs(v)>thr;
+    rows.push({l, v:`${v>0?'+':''}${v.toFixed(1)}°`, bad}); };
+  push('몸통 중심축',m.centerTilt,T.vert); push('상체 세로',m.upperTilt,T.vert);
+  push('하지 세로',m.legTilt,T.vert); push('어깨',m.shoulderTilt,T.horiz);
+  push('골반',m.pelvisTilt,T.horiz); push('무릎',m.kneeTilt,T.horiz);
+  push('발목',m.ankleTilt,T.horiz); push('발',m.toeTilt,T.horiz);
+
+  // 하단 반투명 패널에 2열로 표기
+  const panelH=Math.max(S*0.03,20)*(Math.ceil(rows.length/2)+1)+20;
+  const py=H-panelH;
+  cx3.fillStyle='rgba(10,10,10,.82)'; cx3.fillRect(0,py,W,panelH);
+  cx3.fillStyle='#F59E0B'; cx3.textAlign='left'; cx3.textBaseline='top';
+  cx3.font=`800 ${Math.max(S/48,13)}px -apple-system`;
+  cx3.fillText('측정 지표 (각도)', 16, py+10);
+  const rh=Math.max(S*0.03,20);
+  const fs2=Math.max(S/55,12);
+  cx3.font=`600 ${fs2}px -apple-system`;
+  rows.forEach((r,i)=>{
+    const col=i%2, row=Math.floor(i/2);
+    const x=16+col*(W/2-8), y=py+10+rh*(row+1);
+    cx3.fillStyle='#aaa'; cx3.fillText(r.l, x, y);
+    cx3.fillStyle=r.bad?'#FF6B6B':'#22C55E';
+    cx3.textAlign='left'; cx3.fillText(r.v, x+Math.max(S*0.12,90), y);
+    cx3.textAlign='left';
+  });
 }
 
 /* ── 다운로드 ── */
