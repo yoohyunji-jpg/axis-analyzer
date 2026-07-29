@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <title>AXIS 자세분석 · 누워서</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=Noto+Sans+KR:wght@700;900&display=swap" rel="stylesheet">
 <style>
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
 :root{
@@ -98,7 +99,7 @@ h1{font-size:23px;font-weight:900;letter-spacing:-.01em;margin-bottom:6px;line-h
 <body>
 
 <div id="hdr">
-  <div id="brand">HELLO BODY <span>AXIS</span><small>자세분석 · 누워서 (탑뷰) · <b style="color:#F59E0B;">v8 도형</b></small></div>
+  <div id="brand">HELLO BODY <span>AXIS</span><small>자세분석 · 누워서 (탑뷰) · <b style="color:#F59E0B;">v9 포스터</b></small></div>
   <div id="stepInd">1 / 4</div>
 </div>
 
@@ -155,19 +156,30 @@ h1{font-size:23px;font-weight:900;letter-spacing:-.01em;margin-bottom:6px;line-h
   <section class="screen" id="s4">
     <div class="eyebrow">STEP 4 · RESULT</div>
     <h1>측정 결과</h1>
-    <div style="display:flex;gap:8px;margin-bottom:12px;">
-      <input id="memberName" placeholder="회원명" style="flex:1;padding:11px;border-radius:10px;
+    <div style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap;">
+      <input id="memberName" placeholder="회원명" style="flex:1;min-width:100px;padding:11px;border-radius:10px;
         background:var(--card);border:1px solid var(--border);color:#fff;font-size:14px;outline:none;">
-      <input id="measureDate" type="date" style="flex:1;padding:11px;border-radius:10px;
+      <input id="measureDate" type="date" style="flex:1;min-width:130px;padding:11px;border-radius:10px;
+        background:var(--card);border:1px solid var(--border);color:#fff;font-size:14px;outline:none;">
+    </div>
+    <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
+      <input id="centerName" placeholder="센터명" value="헬스엔젤스 필라테스 옥련점" style="flex:2;min-width:160px;padding:11px;border-radius:10px;
+        background:var(--card);border:1px solid var(--border);color:#fff;font-size:14px;outline:none;">
+      <input id="moveName" placeholder="측정 동작" value="누워서" style="flex:1;min-width:110px;padding:11px;border-radius:10px;
         background:var(--card);border:1px solid var(--border);color:#fff;font-size:14px;outline:none;">
     </div>
     <div id="cwrap3" style="width:100%;background:#000;border-radius:14px;overflow:hidden;border:1px solid var(--border);margin-bottom:10px;">
       <canvas id="cv3" style="display:block;width:100%;height:auto;"></canvas>
     </div>
-    <div style="font-size:12px;color:var(--gray);text-align:center;margin-bottom:14px;">▲ 사진 위 측정 &nbsp;|&nbsp; ▼ 도형 정렬도</div>
-    <div id="cwrap4" style="width:100%;background:#000;border-radius:14px;overflow:hidden;border:1px solid var(--border);margin-bottom:14px;">
+    <div style="font-size:12px;color:var(--gray);text-align:center;margin-bottom:10px;">▲ 사진 위 측정 (진단용)</div>
+    <div id="cwrap4" style="width:100%;background:#000;border-radius:14px;overflow:hidden;border:1px solid var(--border);margin-bottom:10px;">
       <canvas id="cv4" style="display:block;width:100%;height:auto;"></canvas>
     </div>
+    <div style="font-size:12px;color:var(--gray);text-align:center;margin-bottom:10px;">▲ 도형 정렬도 (분석용)</div>
+    <div id="cwrap5" style="width:100%;background:#000;border-radius:14px;overflow:hidden;border:1px solid var(--border);margin-bottom:10px;">
+      <canvas id="cv5" style="display:block;width:100%;height:auto;"></canvas>
+    </div>
+    <div style="font-size:12px;color:var(--gold);text-align:center;margin-bottom:14px;">▲ 몬드리안 포스터 (공유용)</div>
     <div class="res-grid" id="resGrid"></div>
     <div class="res-note" id="resNote"></div>
     <button class="btn gold" id="dlPng">📷 이미지 저장 (카메라롤/공유)</button>
@@ -453,6 +465,7 @@ $('runAnalyze').onclick = ()=>{
   const metrics=computeMetrics();
   renderResult(metrics);
   renderDiagram(metrics);
+  renderMondrian(metrics);
   go(4);
 };
 
@@ -751,6 +764,101 @@ function renderDiagram(m){
   x.fillStyle='#fff'; x.font='600 15px -apple-system';
   x.fillText(`${name?name+' · ':''}${date}`, 16, 40);
 }
+
+/* ── 세 번째 이미지: 몬드리안 포스터 (공유용) ── */
+function renderMondrian(m){
+  const c=m._corrected; if(!c) return;
+  const cv=$('cv5'), x=cv.getContext('2d');
+  const W=800, H=1200; cv.width=W; cv.height=H;
+  const COL={cream:'#EFE9DA',red:'#A8382B',ink:'#17150F',gold:'#8C6F35',blue:'#2E4756'};
+  const M=54, topBar=96, botBar=185;
+  const fx=M, fy=M+topBar, fw=W-M*2, fh=H-M*2-topBar-botBar;
+  x.fillStyle=COL.cream; x.fillRect(0,0,W,H);
+
+  const mid=(a,b)=>a&&b?{x:(a.x+b.x)/2,y:(a.y+b.y)/2}:null;
+  const T=(nx,ny)=>({x:fx+nx*fw, y:fy+ny*fh});
+  const has=(k)=>c[k]!=null;
+  // 필수 점 없으면 안내만
+  if(!has('sL')||!has('sR')||!has('hL')||!has('hR')){
+    x.fillStyle=COL.ink; x.font='700 20px -apple-system'; x.textAlign='center';
+    x.fillText('데이터 부족 — 어깨·골반 필요', W/2, H/2); return;
+  }
+  const yWall=(k,side)=>{ const a=c[k[0]],b=c[k[1]]; if(!a||!b) return null;
+    const A=T(a.x,a.y),B=T(b.x,b.y); const sl=(B.y-A.y)/((B.x-A.x)||1e-6);
+    const wx=side==='L'?fx:fx+fw; return A.y+sl*(wx-A.x); };
+  const sm=mid(c.sL,c.sR), hm=mid(c.hL,c.hR);
+  const AV=T(sm.x,sm.y),BV=T(hm.x,hm.y);
+  const vsl=(BV.x-AV.x)/((BV.y-AV.y)||1e-6);
+  const xAtY=(yy)=>AV.x+vsl*(yy-AV.y);
+  const xTop=AV.x+vsl*(fy-AV.y), xBot=AV.x+vsl*(fy+fh-AV.y);
+
+  function band(tL,tR,bL,bR,fillL,fillR){
+    if(tL==null||bL==null) return;
+    const tM=(tL+tR)/2, bM=(bL+bR)/2, xt=xAtY(tM), xb=xAtY(bM);
+    x.fillStyle=fillL; x.beginPath();
+    x.moveTo(fx,tL); x.lineTo(xt,tM); x.lineTo(xb,bM); x.lineTo(fx,bL); x.closePath(); x.fill();
+    x.fillStyle=fillR; x.beginPath();
+    x.moveTo(xt,tM); x.lineTo(fx+fw,tR); x.lineTo(fx+fw,bR); x.lineTo(xb,bM); x.closePath(); x.fill();
+  }
+  const Bsh={L:yWall(['sL','sR'],'L'),R:yWall(['sL','sR'],'R')};
+  const Bhp={L:yWall(['hL','hR'],'L'),R:yWall(['hL','hR'],'R')};
+  const Bkn=has('kL')&&has('kR')?{L:yWall(['kL','kR'],'L'),R:yWall(['kL','kR'],'R')}:null;
+  const Ban=has('aL')&&has('aR')?{L:yWall(['aL','aR'],'L'),R:yWall(['aL','aR'],'R')}:null;
+
+  band(fy,fy, Bsh.L,Bsh.R, COL.cream,COL.cream);
+  band(Bsh.L,Bsh.R, Bhp.L,Bhp.R, COL.red,COL.cream);
+  if(Bkn){ band(Bhp.L,Bhp.R, Bkn.L,Bkn.R, COL.cream,COL.blue);
+    if(Ban){ band(Bkn.L,Bkn.R, Ban.L,Ban.R, COL.gold,COL.cream);
+      band(Ban.L,Ban.R, fy+fh,fy+fh, COL.cream,COL.cream); }
+    else band(Bkn.L,Bkn.R, fy+fh,fy+fh, COL.gold,COL.cream);
+  } else band(Bhp.L,Bhp.R, fy+fh,fy+fh, COL.cream,COL.blue);
+
+  // 그리드 선
+  x.strokeStyle=COL.ink; x.lineCap='butt';
+  const HLW=Math.max(fw*0.018,6);
+  [['sL','sR'],['hL','hR'],['kL','kR'],['aL','aR']].forEach(k=>{
+    if(!has(k[0])||!has(k[1]))return; x.lineWidth=HLW;
+    x.beginPath(); x.moveTo(fx,yWall(k,'L')); x.lineTo(fx+fw,yWall(k,'R')); x.stroke(); });
+  x.lineWidth=HLW; x.beginPath(); x.moveTo(xTop,fy); x.lineTo(xBot,fy+fh); x.stroke();
+  x.lineWidth=HLW*1.5; x.strokeRect(fx,fy,fw,fh);
+
+  // 메타
+  const name=($('memberName').value||'').trim();
+  const center=($('centerName').value||'').trim();
+  const move=($('moveName').value||'').trim();
+  const date=$('measureDate').value||new Date().toISOString().slice(0,10);
+  const tilt=(a,b)=>{let d=Math.atan2(b.y-a.y,b.x-a.x)*180/Math.PI; if(d>90)d-=180;else if(d<-90)d+=180; return d;};
+
+  // 상단
+  x.fillStyle=COL.ink; x.textAlign='left'; x.textBaseline='alphabetic';
+  x.font='900 46px "Noto Sans KR",sans-serif'; x.fillText('AXIS', M, M+50);
+  x.fillStyle=COL.red; x.font='700 15px "Space Grotesk",sans-serif';
+  x.fillText('POSTURE ALIGNMENT', M+140, M+34);
+  x.fillStyle=COL.gold; x.font='500 13px "Noto Sans KR",sans-serif';
+  x.fillText(center||'HELLO BODY', M+140, M+54);
+
+  // 하단
+  const dy=fy+fh+38;
+  x.textAlign='left'; x.fillStyle=COL.ink; x.font='900 22px "Noto Sans KR",sans-serif';
+  x.fillText(name||'—', M, dy);
+  if(move){ x.textAlign='right'; x.fillStyle=COL.red; x.font='700 14px "Space Grotesk",sans-serif';
+    x.fillText(move, W-M, dy-2); }
+  const sh=tilt(c.sL,c.sR), hp=tilt(c.hL,c.hR);
+  const kn=has('kL')&&has('kR')?tilt(c.kL,c.kR):null;
+  const cen=Math.atan2(sm.x-hm.x, hm.y-sm.y)*180/Math.PI;
+  const items=[['어깨',sh,2],['골반',hp,2],['무릎',kn,2],['중심축',cen,3]];
+  const cw=fw/4, gy=dy+30;
+  items.forEach(([l,v,thr],i)=>{ const cx=fx+cw*i+cw/2; x.textAlign='center';
+    x.fillStyle=COL.gold; x.font='500 12px "Noto Sans KR",sans-serif'; x.fillText(l, cx, gy);
+    if(v==null){ x.fillStyle=COL.ink; x.font='900 22px "Noto Sans KR",sans-serif'; x.fillText('—',cx,gy+32); return; }
+    const bad=Math.abs(v)>thr; x.fillStyle=bad?COL.red:COL.ink;
+    x.font='900 30px "Noto Sans KR",sans-serif'; x.fillText((v>0?'+':'')+v.toFixed(1)+'°', cx, gy+34); });
+  x.strokeStyle=COL.ink; x.lineWidth=1.5;
+  x.beginPath(); x.moveTo(M,gy+54); x.lineTo(W-M,gy+54); x.stroke();
+  x.fillStyle=COL.ink; x.textAlign='left'; x.font='400 12px "Space Grotesk",sans-serif';
+  x.fillText('MEASURED  '+date, M, gy+76);
+  x.textAlign='right'; x.fillText('@hellobody.axis', W-M, gy+76);
+}
 function fileBase(){
   const name=($('memberName').value||'회원').replace(/\s/g,'');
   const date=$('measureDate').value||new Date().toISOString().slice(0,10);
@@ -772,19 +880,20 @@ async function shareCanvas(canvas, suffix){
   });
 }
 $('dlPng').onclick=async ()=>{
-  await shareCanvas($('cv3'),'_사진');       // 1번: 사진+측정
-  await shareCanvas($('cv4'),'_도형');       // 2번: 도형 정렬도
+  await shareCanvas($('cv5'),'_포스터');     // 몬드리안 (공유용, 먼저)
+  await shareCanvas($('cv3'),'_사진');       // 사진+측정
+  await shareCanvas($('cv4'),'_도형');       // 도형 정렬도
 };
 $('dlPdf').onclick=()=>{
   try{
     const { jsPDF }=window.jspdf;
-    const c3=$('cv3'), c4=$('cv4');
-    const img3=c3.toDataURL('image/jpeg',0.92);
-    const pdf=new jsPDF({orientation: c3.width>c3.height?'l':'p', unit:'pt', format:[c3.width,c3.height]});
-    pdf.addImage(img3,'JPEG',0,0,c3.width,c3.height);
-    // 2페이지: 도형
+    const c3=$('cv3'), c4=$('cv4'), c5=$('cv5');
+    const pdf=new jsPDF({orientation: c5.width>c5.height?'l':'p', unit:'pt', format:[c5.width,c5.height]});
+    pdf.addImage(c5.toDataURL('image/jpeg',0.92),'JPEG',0,0,c5.width,c5.height);  // 1p 포스터
+    pdf.addPage([c3.width,c3.height], c3.width>c3.height?'l':'p');
+    pdf.addImage(c3.toDataURL('image/jpeg',0.92),'JPEG',0,0,c3.width,c3.height);  // 2p 사진
     pdf.addPage([c4.width,c4.height], c4.width>c4.height?'l':'p');
-    pdf.addImage(c4.toDataURL('image/jpeg',0.92),'JPEG',0,0,c4.width,c4.height);
+    pdf.addImage(c4.toDataURL('image/jpeg',0.92),'JPEG',0,0,c4.width,c4.height);  // 3p 도형
     pdf.save(fileBase()+'.pdf');
   }catch(e){ alert('PDF 저장 실패 — PNG로 저장해 주세요.'); }
 };
